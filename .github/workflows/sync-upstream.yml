@@ -1,0 +1,37 @@
+name: Sync upstream
+
+# 自动绑定上游更新：每周一把上游 zhayinggang/ktv-home 的 master 合并到本 fork。
+# 只同步代码，不自动跑 Build fpk；同步完如需出新 fpk，手动跑 Build fpk，
+# 它会自动取上游最新 Release 的 APK，版本号也默认跟上游走。
+# 合并冲突时本流程失败，需手动处理。
+on:
+  schedule:
+    - cron: "0 2 * * 1" # 每周一 02:00 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Merge upstream
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git remote add upstream https://github.com/zhayinggang/ktv-home.git
+          git fetch upstream
+          if git merge --no-edit upstream/master; then
+            echo "已与上游同步"
+          else
+            echo "::error::与上游合并冲突，需手动处理"
+            git merge --abort
+            exit 1
+          fi
+          git push origin master
