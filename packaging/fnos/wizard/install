@@ -1,0 +1,1 @@
+[{"items":[{"helpText":"本应用包含 2 个 Docker 服务（KTV 服务、数据库），镜像从网络拉取，约需 500MB 磁盘空间。","type":"tips"},{"helpText":"安装完成后：手机点歌 http://<飞牛IP>:8080/m；管理后台 http://<飞牛IP>:8080/m/admin。","type":"tips"},{"helpText":"安全提示：本应用仅适用于可信局域网，请勿把 8080 端口暴露到公网。","type":"tips"}],"stepTitle":"欢迎安装 家庭KTV"}]

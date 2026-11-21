@@ -1,0 +1,89 @@
+name: ktv-home
+
+services:
+  db:
+    image: docker.m.daocloud.io/library/postgres:16-alpine
+    container_name: ktv-db
+    environment:
+      POSTGRES_DB: ktv
+      POSTGRES_USER: ktv
+      # 固定默认密码（参考飞牛官方做法：配置硬编码，不依赖 .env）。
+      # postgres 端口不对外暴露，仅容器间使用。
+      POSTGRES_PASSWORD: "KtvDb2026ChangeMe"
+      TZ: Asia/Shanghai
+    volumes:
+      - type: bind
+        source: ${TRIM_PKGVAR:-/var/apps/ktv-home/var}/postgres
+        target: /var/lib/postgresql/data
+        bind:
+          create_host_path: true
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ktv -d ktv"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+    restart: unless-stopped
+    stop_grace_period: 1m
+
+  ktv:
+    # GHCR 公开镜像，免登录可拉取。阿里云配好后可切到阿里云加速。
+    image: ghcr.io/aeson70/ktv-home:latest
+    container_name: ktv-app
+    devices:
+      # Intel 核显透传，用于 VAAPI 硬件转码（N100 等）。
+      - /dev/dri:/dev/dri
+    environment:
+      SERVER_PORT: 8080
+      SPRING_DATASOURCE_URL: jdbc:postgresql://db:5432/ktv
+      SPRING_DATASOURCE_USERNAME: ktv
+      SPRING_DATASOURCE_PASSWORD: "KtvDb2026ChangeMe"
+      KTV_SOURCE_LIBRARY_PATH: /source-music
+      KTV_LIBRARY_PATH: /music
+      KTV_DATA_PATH: /data
+      KTV_DISCOVERY_ENABLED: "true"
+      KTV_DISCOVERY_UDP_PORT: 18888
+      KTV_DISCOVERY_NAME: 家庭KTV
+      KTV_AI_ENABLED: "false"
+      JAVA_TOOL_OPTIONS: -XX:MaxRAMPercentage=70 -Xmx512m
+      TZ: Asia/Shanghai
+    ports:
+      # Web/API/WebSocket/媒体流
+      - "8080:8080/tcp"
+      # Android TV 局域网自动发现（TV 只扫描此 UDP 端口）
+      - "18888:18888/udp"
+    volumes:
+      - type: bind
+        source: ${TRIM_PKGVAR:-/var/apps/ktv-home/var}/source-music
+        target: /source-music
+        bind:
+          create_host_path: true
+      - type: bind
+        source: ${TRIM_PKGVAR:-/var/apps/ktv-home/var}/music
+        target: /music
+        bind:
+          create_host_path: true
+      - type: bind
+        source: ${TRIM_PKGVAR:-/var/apps/ktv-home/var}/data
+        target: /data
+        bind:
+          create_host_path: true
+      # 宿主机数据目录（只读挂载，供前端选择本地源目录用）。
+      # 默认挂载 /vol2/1000（飞牛常用数据卷）；其他 NAS 请按需修改。
+      - type: bind
+        source: /vol2/1000
+        target: /host-data
+        read_only: true
+        bind:
+          create_host_path: true
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8080/api/health | grep -q '\"status\":\"UP\"'"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+      start_period: 30s
+    restart: unless-stopped
+    stop_grace_period: 30s

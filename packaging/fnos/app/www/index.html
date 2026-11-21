@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>家庭KTV · 智能家庭KTV</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
+    background: #050810;
+    color: #e8f0ff;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+  /* 科技网格背景 */
+  .bg-grid {
+    position: fixed; inset: 0; z-index: 0; pointer-events: none;
+    background-image:
+      linear-gradient(rgba(56,189,248,.04) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(56,189,248,.04) 1px, transparent 1px);
+    background-size: 40px 40px;
+    mask-image: radial-gradient(ellipse at 50% 30%, black 30%, transparent 75%);
+  }
+  .bg-glow {
+    position: fixed; inset: 0; z-index: 0; pointer-events: none;
+    background:
+      radial-gradient(ellipse 600px 300px at 20% 10%, rgba(56,189,248,.08), transparent),
+      radial-gradient(ellipse 500px 280px at 85% 80%, rgba(167,139,250,.06), transparent);
+  }
+  .wrap { max-width: 600px; margin: 0 auto; padding: 48px 24px 40px; position: relative; z-index: 1; }
+  /* 顶部状态栏 */
+  .status-bar {
+    display: flex; align-items: center; gap: 8px;
+    font-size: 11px; color: #38bdf8; letter-spacing: 2px; text-transform: uppercase;
+    margin-bottom: 20px; font-family: ui-monospace, monospace;
+  }
+  .status-dot { width: 8px; height: 8px; border-radius: 50%; background: #34d399;
+    box-shadow: 0 0 12px #34d399; animation: pulse 2s infinite; }
+  @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: .4; } }
+  h1 {
+    font-size: 42px; font-weight: 800; letter-spacing: 4px; margin-bottom: 8px;
+    background: linear-gradient(135deg, #38bdf8 0%, #818cf8 50%, #c084fc 100%);
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+  }
+  .subtitle { color: #64748b; font-size: 13px; letter-spacing: 1px; margin-bottom: 32px; }
+  .subtitle b { color: #38bdf8; font-weight: 600; }
+  /* 卡片 */
+  a.card {
+    display: block; position: relative;
+    background: rgba(15,23,42,.6);
+    border: 1px solid rgba(56,189,248,.15);
+    border-radius: 12px; padding: 18px 20px; margin-bottom: 12px;
+    color: #e8f0ff; text-decoration: none;
+    backdrop-filter: blur(12px);
+    transition: all .25s cubic-bezier(.4,0,.2,1);
+    overflow: hidden;
+  }
+  a.card::before {
+    content: ''; position: absolute; top: 0; left: 0; right: 0; height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(56,189,248,.5), transparent);
+    opacity: 0; transition: opacity .25s;
+  }
+  a.card:hover { border-color: rgba(56,189,248,.4); transform: translateY(-2px);
+    box-shadow: 0 12px 32px rgba(56,189,248,.12); }
+  a.card:hover::before { opacity: 1; }
+  a.card b { font-size: 16px; display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
+  a.card b .icon { width: 32px; height: 32px; border-radius: 8px; display: grid; place-items: center;
+    background: rgba(56,189,248,.1); border: 1px solid rgba(56,189,248,.2); font-size: 16px; }
+  a.card span { font-size: 12px; color: #64748b; word-break: break-all; font-family: ui-monospace, monospace; }
+  a.card .arrow { position: absolute; right: 20px; top: 50%; transform: translateY(-50%);
+    color: #38bdf8; opacity: 0; transition: all .25s; }
+  a.card:hover .arrow { opacity: 1; right: 16px; }
+  /* 底部 */
+  .foot {
+    margin-top: 32px; padding: 16px 18px;
+    font-size: 12px; color: #475569; line-height: 1.9;
+    border: 1px solid rgba(56,189,248,.1); border-radius: 10px;
+    background: rgba(15,23,42,.4);
+  }
+  .foot b { color: #38bdf8; }
+  .version { text-align: center; margin-top: 24px; font-size: 10px; color: #334155;
+    font-family: ui-monospace, monospace; letter-spacing: 1px; }
+</style>
+</head>
+<body>
+<div class="bg-grid"></div>
+<div class="bg-glow"></div>
+<div class="wrap">
+  <div class="status-bar"><span class="status-dot"></span> SYSTEM ONLINE · KTV CORE v2.0</div>
+  <h1>家庭KTV</h1>
+  <p class="subtitle">智能家庭 <b>KTV</b> · 手机点歌 · 电视播放</p>
+  <div id="links"></div>
+  <div class="foot">
+    <b>▸ 导入歌曲：</b>把歌曲放进原始素材目录，进入「管理后台」→ 仪表盘<br>
+    点击「扫描源路径」，兼容文件自动入库，不兼容文件进入待转码列表。
+  </div>
+  <div class="version">HOME KTV // FPK BUILD</div>
+</div>
+<script>
+(function () {
+  var h = location.hostname;
+  var items = [
+    ["📱", "手机点歌", "扫码或直连 · 实时同步播放队列", "http://" + h + ":8080/m"],
+    ["⚙️", "管理后台", "曲库 · 转码 · 扫描 · 设置", "http://" + h + ":8080/m/admin"]
+  ];
+  var box = document.getElementById("links");
+  items.forEach(function (it) {
+    var a = document.createElement("a");
+    a.className = "card"; a.href = it[3]; a.target = "_blank"; a.rel = "noopener";
+    a.innerHTML = '<b><span class="icon">' + it[0] + '</span>' + it[1] + '</b>' +
+                  '<span>' + it[2] + ' · ' + it[3] + '</span>' +
+                  '<span class="arrow">→</span>';
+    box.appendChild(a);
+  });
+})();
+</script>
+</body>
+</html>

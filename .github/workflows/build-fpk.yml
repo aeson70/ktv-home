@@ -1,0 +1,105 @@
+name: Build fpk
+
+# 在仓库的 Actions 页面点 "Run workflow" 即可生成 .fpk 安装包，
+# 构建产物在 workflow 运行页面的 Artifacts 中下载。
+# 说明：KTV 镜像推送到 ghcr.io/aeson70/ktv-home:latest（公开），
+# 依赖镜像走 docker.m.daocloud.io 镜像站；fpk 内不再打包镜像文件，
+# 飞牛安装时直接拉取（NAS 已验证 ghcr.io 与 daocloud 均可连通）。
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "fpk 版本号（写入 manifest）"
+        default: "1.0.0"
+        required: true
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Resolve version
+        id: version
+        run: |
+          VERSION="${{ inputs.version }}"
+          if [ "${{ github.ref_type }}" = "tag" ]; then
+            VERSION="${{ github.ref_name }}"
+          fi
+          VERSION="${VERSION#v}"
+          [ -n "$VERSION" ] || VERSION="1.0.0"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          sed -i "s/^version=.*/version=$VERSION/" packaging/fnos/manifest
+          grep '^version=' packaging/fnos/manifest
+
+      - name: Build and push KTV image
+        run: |
+          VER="${{ steps.version.outputs.version }}"
+          TAGS="-t ghcr.io/aeson70/ktv-home:latest -t ghcr.io/aeson70/ktv-home:${VER}"
+          docker build --build-arg BASE_REGISTRY=docker.io -f backend/Dockerfile $TAGS .
+          docker push ghcr.io/aeson70/ktv-home:latest
+          docker push ghcr.io/aeson70/ktv-home:${VER}
+
+      - name: Prepare fnpack (vendored, checksum verified)
+        run: |
+          echo "54b97fa7b70968c4d05c79840f5daeff508957d0bb2062fdb0376d00d9615c93  tools/fnpack-linux-amd64" | sha256sum -c -
+          chmod +x tools/fnpack-linux-amd64
+          cp tools/fnpack-linux-amd64 fnpack
+          ./fnpack --help >/dev/null
+
+      - name: Build fpk
+        run: |
+          ./fnpack build --directory packaging/fnos
+          ls -lh ./*.fpk
+
+      - name: Rename with version
+        id: rename
+        run: |
+          ASSET="ktv-home-${{ steps.version.outputs.version }}-fnOS-x86.fpk"
+          mv ktv-home.fpk "$ASSET"
+          sha256sum "$ASSET" > "$ASSET.sha256"
+          ls -lh "$ASSET" "$ASSET.sha256"
+          echo "asset=$ASSET" >> "$GITHUB_OUTPUT"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ktv-home-fpk
+          path: |
+            ${{ steps.rename.outputs.asset }}
+            ${{ steps.rename.outputs.asset }}.sha256
+          if-no-files-found: error
+
+      - name: Attach to GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # 每次运行都发布到 Release（tag 用版本号）
+          if [[ "${{ github.ref }}" == refs/tags/* ]]; then
+            TAG="${{ github.ref_name }}"
+          else
+            TAG="v${{ github.event.inputs.version || '1.0.0' }}"
+          fi
+          gh release view "$TAG" --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1 || \
+            gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --title "ktv-home $TAG" --generate-notes
+          gh release upload "$TAG" \
+            "${{ steps.rename.outputs.asset }}" \
+            "${{ steps.rename.outputs.asset }}.sha256" \
+            --repo "$GITHUB_REPOSITORY" --clobber
