@@ -114,7 +114,7 @@ public class AdminScanController {
                 "effective", effective,
                 "defaultPath", appProperties.getSourceLibraryPath(),
                 "exists", Files.isDirectory(Path.of(effective)),
-                "roots", List.of("/host-data", "/source-music"));
+                "roots", List.of("/host-data", "/host-data-vol1", "/source-music"));
     }
 
     /**
@@ -134,15 +134,15 @@ public class AdminScanController {
     }
 
     /**
-     * 浏览目录（仅限 /host-data 与 /source-music 两个根目录内），供前端选择曲库路径。
+     * 浏览目录（仅限 /host-data、/host-data-vol1 与 /source-music 三个根目录内），供前端选择曲库路径。
      *
-     * Browse directories under /host-data or /source-music for picking a library path.
+     * Browse directories under /host-data, /host-data-vol1 or /source-music for picking a library path.
      */
     @GetMapping("/browse-dirs")
     public Map<String, Object> browseDirs(@RequestParam(defaultValue = "") String path) {
         String current = path.isBlank() ? "/host-data" : SettingService.toContainerPath(path);
         Path dir = Path.of(current).toAbsolutePath().normalize();
-        if (!dir.startsWith("/host-data") && !dir.startsWith("/source-music")) dir = Path.of("/host-data");
+        if (!isBrowseRoot(dir)) dir = Path.of("/host-data");
         List<Map<String, String>> dirs = new ArrayList<>();
         if (Files.isDirectory(dir)) {
             try (var stream = Files.list(dir)) {
@@ -155,8 +155,13 @@ public class AdminScanController {
             }
         }
         String parent = dir.getParent() == null ? "" : dir.getParent().toString();
-        if (!parent.startsWith("/host-data") && !parent.startsWith("/source-music")) parent = "";
+        if (!parent.isEmpty() && !isBrowseRoot(Path.of(parent))) parent = "";
         return Map.of("path", dir.toString(), "parent", parent, "dirs", dirs);
+    }
+
+    /** 目录是否在三个浏览根目录（/host-data、/host-data-vol1、/source-music）内。 */
+    private static boolean isBrowseRoot(Path dir) {
+        return dir.startsWith("/host-data") || dir.startsWith("/host-data-vol1") || dir.startsWith("/source-music");
     }
 
     /**

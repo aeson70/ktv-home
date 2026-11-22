@@ -74,21 +74,25 @@ public class SettingService {
         return Boolean.TRUE.equals(getAll().get(LIBRARY_WATCH_ENABLED));
     }
 
-    /** 宿主机路径 → 容器内路径：/vol2/1000/... 对应只读挂载的 /host-data/... */
+    /** 宿主机路径 → 容器内路径：/vol2/1000/... 对应只读挂载的 /host-data/...，/vol1/1000/... 对应 /host-data-vol1/... */
     public static String toContainerPath(String raw) {
         if (raw == null) return "";
         String p = raw.trim();
         if (p.equals("/vol2/1000")) return "/host-data";
         if (p.startsWith("/vol2/1000/")) return "/host-data/" + p.substring("/vol2/1000/".length());
+        if (p.equals("/vol1/1000")) return "/host-data-vol1";
+        if (p.startsWith("/vol1/1000/")) return "/host-data-vol1/" + p.substring("/vol1/1000/".length());
         return p;
     }
 
-    /** 容器内路径 → 宿主机路径（展示用）：/host-data/... 对应 /vol2/1000/... */
+    /** 容器内路径 → 宿主机路径（展示用）：/host-data/... 对应 /vol2/1000/...，/host-data-vol1/... 对应 /vol1/1000/... */
     public static String toHostPath(String containerPath) {
         if (containerPath == null) return "";
         String p = containerPath.trim();
         if (p.equals("/host-data")) return "/vol2/1000";
         if (p.startsWith("/host-data/")) return "/vol2/1000/" + p.substring("/host-data/".length());
+        if (p.equals("/host-data-vol1")) return "/vol1/1000";
+        if (p.startsWith("/host-data-vol1/")) return "/vol1/1000/" + p.substring("/host-data-vol1/".length());
         return p;
     }
 
@@ -111,9 +115,10 @@ public class SettingService {
         String container = toContainerPath(raw);
         Path p = Path.of(container).toAbsolutePath().normalize();
         boolean allowed = p.equals(Path.of("/host-data")) || p.startsWith("/host-data/")
+                || p.equals(Path.of("/host-data-vol1")) || p.startsWith("/host-data-vol1/")
                 || p.equals(Path.of("/source-music")) || p.startsWith("/source-music/");
         if (!allowed) throw new com.homektv.web.ApiException("SOURCE_PATH_NOT_ALLOWED",
-                "曲库路径只允许在 /host-data（宿主机 /vol2/1000）或 /source-music 下");
+                "曲库路径只允许在 /host-data（宿主机 /vol2/1000）、/host-data-vol1（宿主机 /vol1/1000）或 /source-music 下");
         if (!Files.isDirectory(p)) throw new com.homektv.web.ApiException("SOURCE_PATH_MISSING",
                 "目录不存在：" + p);
         return p.toString();

@@ -76,6 +76,13 @@ services:
         read_only: true
         bind:
           create_host_path: true
+      # vol1 数据卷同样只读挂载（/vol1/1000 下的 mv 等文件夹也能选作曲库）。
+      - type: bind
+        source: /vol1/1000
+        target: /host-data-vol1
+        read_only: true
+        bind:
+          create_host_path: true
     depends_on:
       db:
         condition: service_healthy

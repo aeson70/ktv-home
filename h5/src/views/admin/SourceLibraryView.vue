@@ -15,17 +15,17 @@
         <strong>曲库路径</strong>
         <span>当前扫描：{{ pathView.effective || '—' }}</span>
         <small v-if="pathView.custom">自定义（宿主机）：{{ pathView.custom }} · 只读来源会复制入库，原文件保留</small>
-        <small v-else>默认路径：{{ pathView.defaultPath || '/source-music' }} · 填宿主机路径如 /vol2/1000/mv，不用 SSH、不用重启容器</small>
+        <small v-else>默认路径：{{ pathView.defaultPath || '/source-music' }} · 填宿主机路径如 /vol2/1000/mv 或 /vol1/1000/mv，不用 SSH、不用重启容器</small>
       </div>
       <div class="path-edit">
-        <input v-model.trim="pathInput" placeholder="/vol2/1000/mv 或 /host-data/mv" @keyup.enter="savePath" />
+        <input v-model.trim="pathInput" placeholder="/vol2/1000/mv 或 /vol1/1000/mv" @keyup.enter="savePath" />
         <button class="secondary" @click="toggleBrowse">{{ browsing ? '收起浏览' : '浏览' }}</button>
         <button class="primary" :disabled="saving" @click="savePath">{{ saving ? '保存中…' : '保存路径' }}</button>
         <button class="secondary" :disabled="!pathView.custom || saving" @click="resetPath">恢复默认</button>
         <button class="secondary" @click="rescan">重新扫描</button>
       </div>
       <div v-if="browsing" class="browse-panel">
-        <div class="browse-head"><span>{{ browsePath }}</span><button class="link" :disabled="!browseParent" @click="browseUp">上级目录</button></div>
+        <div class="browse-head"><span>{{ browsePath }}</span><button class="link" @click="browseInto('/host-data')">vol2</button><button class="link" @click="browseInto('/host-data-vol1')">vol1</button><button class="link" @click="browseInto('/source-music')">本地</button><button class="link" :disabled="!browseParent" @click="browseUp">上级目录</button></div>
         <div class="browse-list">
           <button v-for="d in browseDirs" :key="d.path" class="browse-item" @click="browseInto(d.path)">{{ d.name }}</button>
           <span v-if="!browseDirs.length" class="empty">此目录下没有子目录</span>
@@ -180,11 +180,14 @@ async function browseInto(path) { try { await loadBrowse(path) } catch (e) { awa
 /** 返回上级目录 / Go to the parent directory */
 async function browseUp() { if (browseParent.value) await browseInto(browseParent.value) }
 
-/** 把当前浏览目录填入路径输入框 / Fill the path input with the browsed directory */
+/** 把当前浏览目录填入路径输入框（容器内路径换回宿主机写法） / Fill the path input with the browsed directory */
 function pickBrowsePath() {
-  pathInput.value = browsePath.value.startsWith('/host-data/')
-    ? '/vol2/1000/' + browsePath.value.slice('/host-data/'.length)
-    : browsePath.value
+  const p = browsePath.value
+  if (p === '/host-data-vol1') pathInput.value = '/vol1/1000'
+  else if (p.startsWith('/host-data-vol1/')) pathInput.value = '/vol1/1000/' + p.slice('/host-data-vol1/'.length)
+  else if (p === '/host-data') pathInput.value = '/vol2/1000'
+  else if (p.startsWith('/host-data/')) pathInput.value = '/vol2/1000/' + p.slice('/host-data/'.length)
+  else pathInput.value = p
   browsing.value = false
 }
 
