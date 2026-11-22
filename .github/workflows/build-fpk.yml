@@ -5,8 +5,8 @@ name: Build fpk
 # 说明：KTV 镜像推送到 ghcr.io/aeson70/ktv-home:latest（公开），
 # 依赖镜像走 docker.m.daocloud.io 镜像站；fpk 内不再打包镜像文件，
 # 飞牛安装时直接拉取（NAS 已验证 ghcr.io 与 daocloud 均可连通）。
-# TV APK 自动绑定上游：每次运行都取上游 zhayinggang/ktv-home 的最新 Release，
-# 下载它的两个官方签名 APK 拷进镜像，管理后台就能提供电视端下载；
+# TV APK 自动绑定 fork 自己的最新 APK Release（Release 工作流出的 "Home KTV ..."），
+# 没有才回落到上游 zhayinggang/ktv-home 的最新 Release；下载它的两个官方签名 APK 拷进镜像，管理后台就能提供电视端下载；
 # fpk 版本号不填就默认跟上游最新版一致。
 on:
   workflow_dispatch:
@@ -39,16 +39,25 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Resolve upstream APK version
+      - name: Resolve TV APK version
         id: upstream
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          TAG=$(gh api repos/zhayinggang/ktv-home/releases/latest --jq .tag_name)
+          # 优先用 fork 自己的 APK Release（Release 工作流出的 "Home KTV ..." 正式版），没有才回落到上游
+          TAG=$(gh api "repos/$GITHUB_REPOSITORY/releases?per_page=20" --jq '.[] | select(.prerelease == false and (.name | startswith("Home KTV "))) | .tag_name' | head -n 1)
+          if [ -n "$TAG" ]; then
+            APK_REPO="$GITHUB_REPOSITORY"
+          else
+            TAG=$(gh api repos/zhayinggang/ktv-home/releases/latest --jq .tag_name)
+            APK_REPO="zhayinggang/ktv-home"
+          fi
           APK_VERSION="${TAG#v}"
-          [ -n "$APK_VERSION" ] || (echo "取不到上游最新 Release 版本" && exit 1)
+          [ -n "$APK_VERSION" ] || (echo "取不到 TV APK 版本" && exit 1)
           echo "apk_version=$APK_VERSION" >> "$GITHUB_OUTPUT"
-          echo "上游最新版：$APK_VERSION"
+          echo "apk_tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "apk_repo=$APK_REPO" >> "$GITHUB_OUTPUT"
+          echo "TV APK：$APK_REPO $TAG"
 
       - name: Resolve version
         id: version
@@ -63,15 +72,17 @@ jobs:
           sed -i "s/^version=.*/version=$VERSION/" packaging/fnos/manifest
           grep '^version=' packaging/fnos/manifest
 
-      - name: Sync TV APKs from upstream release
+      - name: Sync TV APKs from release
         run: |
           APK_VERSION="${{ steps.upstream.outputs.apk_version }}"
+          APK_TAG="${{ steps.upstream.outputs.apk_tag }}"
+          APK_REPO="${{ steps.upstream.outputs.apk_repo }}"
           mkdir -p dist/tv-apk
           cd dist/tv-apk
           curl -sSL -o "home-ktv-tv-${APK_VERSION}-armeabi-v7a.apk" \
-            "https://github.com/zhayinggang/ktv-home/releases/download/v${APK_VERSION}/home-ktv-tv-${APK_VERSION}-armeabi-v7a.apk"
+            "https://github.com/${APK_REPO}/releases/download/${APK_TAG}/home-ktv-tv-${APK_VERSION}-armeabi-v7a.apk"
           curl -sSL -o "home-ktv-tv-${APK_VERSION}-arm64-v8a.apk" \
-            "https://github.com/zhayinggang/ktv-home/releases/download/v${APK_VERSION}/home-ktv-tv-${APK_VERSION}-arm64-v8a.apk"
+            "https://github.com/${APK_REPO}/releases/download/${APK_TAG}/home-ktv-tv-${APK_VERSION}-arm64-v8a.apk"
           ls -lh
           file home-ktv-tv-*.apk | grep -q "Android package" || (echo "APK 下载失败或不是有效安装包" && exit 1)
 
@@ -129,6 +140,10 @@ jobs:
           fi
           gh release view "$TAG" --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1 || \
             gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --title "ktv-home $TAG" --generate-notes
+          # 重跑同版本时先清掉旧的 TV APK，避免新旧 APK 同时挂在 Release 里
+          for asset in $(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json assets --jq -r '.assets[] | select(.name | startswith("home-ktv-tv-")) | .name'); do
+            gh release delete-asset "$TAG" "$asset" --repo "$GITHUB_REPOSITORY" -y
+          done
           gh release upload "$TAG" \
             "${{ steps.rename.outputs.asset }}" \
             "${{ steps.rename.outputs.asset }}.sha256" \
