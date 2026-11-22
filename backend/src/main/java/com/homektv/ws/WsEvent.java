@@ -21,6 +21,8 @@ public record WsEvent(String type, Object payload) {
     public static final String EFFECT_PLAY = "effect_play";
     public static final String SCORE_RESULT = "score_result";
     public static final String TOAST = "toast";
+    /** 手机扫码在线数变化（TV 据此显隐点歌二维码） */
+    public static final String REMOTE_PRESENCE = "remote_presence";
 
     /**
      * 创建 WsEvent 实例的静态工厂方法。

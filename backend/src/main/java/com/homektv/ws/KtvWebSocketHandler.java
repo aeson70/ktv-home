@@ -57,6 +57,11 @@ public class KtvWebSocketHandler extends TextWebSocketHandler {
         broadcaster.register(session);
         if (isTv(session)) {
             tvOfflineWatcher.onTvConnected();
+            // TV（重）连时主动同步当前手机在线数，TV 才能正确显隐二维码
+            broadcaster.sendTo(session, remotePresenceEvent());
+        } else if (isH5(session)) {
+            // 有手机扫码连入 → 通知 TV 隐藏二维码
+            broadcaster.broadcast(remotePresenceEvent());
         }
         // 连接/重连即推全量快照（详设§4.1）
         broadcaster.sendTo(session, WsEvent.of(WsEvent.SYNC_FULL, snapshotService.snapshot()));
@@ -115,7 +120,12 @@ public class KtvWebSocketHandler extends TextWebSocketHandler {
      */
     @Override
     public void afterConnectionClosed(WebSocketSession session, CloseStatus status) {
-        notifyOfflineIfTv(broadcaster.unregister(session));
+        String clientType = broadcaster.unregister(session);
+        notifyOfflineIfTv(clientType);
+        if ("h5".equals(clientType)) {
+            // 手机断开 → 通知 TV：无人时重新显示二维码
+            broadcaster.broadcast(remotePresenceEvent());
+        }
         log.debug("WS 连接关闭: {}，剩余在线 {}", session.getId(), broadcaster.sessionCount());
     }
 
@@ -131,7 +141,21 @@ public class KtvWebSocketHandler extends TextWebSocketHandler {
     @Override
     public void handleTransportError(WebSocketSession session, Throwable exception) {
         log.debug("WS 传输错误 {}: {}", session.getId(), exception.getMessage());
-        notifyOfflineIfTv(broadcaster.unregister(session));
+        String clientType = broadcaster.unregister(session);
+        notifyOfflineIfTv(clientType);
+        if ("h5".equals(clientType)) {
+            broadcaster.broadcast(remotePresenceEvent());
+        }
+    }
+
+    private boolean isH5(WebSocketSession session) {
+        Object type = session.getAttributes().get("client_type");
+        return "h5".equals(type == null ? null : type.toString());
+    }
+
+    /** 当前手机在线数的 presence 事件（供 TV 决定二维码显隐）。 */
+    private WsEvent remotePresenceEvent() {
+        return WsEvent.of(WsEvent.REMOTE_PRESENCE, java.util.Map.of("h5_count", broadcaster.h5Count()));
     }
 
     private boolean isTv(WebSocketSession session) {

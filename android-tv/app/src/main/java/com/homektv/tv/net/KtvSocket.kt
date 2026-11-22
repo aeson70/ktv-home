@@ -41,6 +41,8 @@ class KtvSocket(
         fun onScore(score: Int, comment: String, songTitle: String) {}
         /** toast 提示。 */
         fun onToast(text: String) {}
+        /** 手机扫码在线数变化（TV 据此显隐点歌二维码）。 */
+        fun onRemotePresence(h5Count: Long) {}
         /** 连接状态变化：true=已连上并完成一次同步，false=断开/重连中。 */
         fun onConnectionChanged(connected: Boolean) {}
     }
@@ -168,6 +170,10 @@ class KtvSocket(
             "toast" -> {
                 val txt = (payload as? JsonObject)?.get("text")?.jsonPrimitive?.contentOrNullSafe().orEmpty()
                 listener.onToast(txt)
+            }
+            "remote_presence" -> {
+                val count = (payload as? JsonObject)?.get("h5_count")?.jsonPrimitive?.longOrNull ?: 0L
+                listener.onRemotePresence(count)
             }
             // 以下事件 payload 均为完整快照
             "sync_full", "queue_updated", "now_playing", "player_state", "playback_restarted",

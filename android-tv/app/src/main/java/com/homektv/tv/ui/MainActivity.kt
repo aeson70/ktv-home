@@ -74,6 +74,9 @@ class MainActivity : AppCompatActivity(), KtvSocket.Listener {
     private var scoreOverlay: ScoreOverlayView? = null
     private var microphoneMonitor: MicrophoneMonitor? = null
     private var microphoneActive = false
+    private var connectedPhonesCount: Long = 0
+    /** 二维码手动显隐：null=跟随手机在线数自动，true=强制显示，false=强制隐藏。 */
+    private var qrManualOverride: Boolean? = null
     private var releaseCheckInFlight = false
     private var checkedReleaseVersion: String? = null
     private var promptedReleaseVersion: String? = null
@@ -399,6 +402,11 @@ class MainActivity : AppCompatActivity(), KtvSocket.Listener {
         binding.remoteMute.setOnClickListener { sendControl("mute", "{\"muted\":${!currentMuted}}") }
         binding.remoteQueue.setOnClickListener { showQueueOverlay() }
         binding.remoteMicrophone.setOnClickListener { toggleMicrophoneMonitor() }
+        binding.remoteQr.setOnClickListener {
+            qrManualOverride = binding.qrPanel.visibility != View.VISIBLE
+            applyQrVisibility()
+        }
+        applyQrVisibility()
         updateMicrophoneButton()
         binding.queueClose.setOnClickListener { binding.queueOverlay.visibility = View.GONE }
         binding.btnVocalOriginal.setOnClickListener {
@@ -667,6 +675,28 @@ class MainActivity : AppCompatActivity(), KtvSocket.Listener {
 
     override fun onToast(text: String) {
         if (text.isNotBlank()) Toast.makeText(this, text, Toast.LENGTH_SHORT).show()
+    }
+
+    override fun onRemotePresence(h5Count: Long) {
+        connectedPhonesCount = h5Count
+        if (h5Count == 0L) qrManualOverride = null
+        applyQrVisibility()
+    }
+
+    /** 二维码显隐：有人扫码连入就隐藏，最后一个手机断开就重新显示；遥控菜单可手动强制显隐。 */
+    private fun applyQrVisibility() {
+        val visible = when (qrManualOverride) {
+            true -> true
+            false -> false
+            null -> connectedPhonesCount == 0L
+        }
+        val visibility = if (visible) View.VISIBLE else View.GONE
+        binding.qrPanel.visibility = visibility
+        binding.imgMiniQr.visibility = visibility
+        binding.txtMiniQrLabel.visibility = visibility
+        binding.imgAudioMiniQr.visibility = visibility
+        binding.txtAudioMiniQrLabel.visibility = visibility
+        binding.remoteQr.text = if (visible) "隐藏二维码" else "显示二维码"
     }
 
     override fun onEffect(effectId: String) {
