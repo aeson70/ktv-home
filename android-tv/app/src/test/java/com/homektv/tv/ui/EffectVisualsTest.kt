@@ -8,7 +8,7 @@ import org.junit.Test
 class EffectVisualsTest {
     @Test
     fun mapsEveryRemoteEffectToAVisual() {
-        assertEquals(setOf("clap", "cheer", "boo", "toast"), EffectVisuals.ids)
+        assertEquals(setOf("clap", "cheer", "boo", "toast", "scream", "whistle", "encore"), EffectVisuals.ids)
         EffectVisuals.ids.forEach { assertNotNull(EffectVisuals.find(it)) }
     }
 

@@ -60,6 +60,9 @@ class MediaImportServiceTest {
         when(settingService.transcodePolicy()).thenReturn(new SettingService.TranscodePolicy(
                 List.of("mp4", "m4v", "mkv"), List.of("h264", "hevc"), List.of("aac", "mp3"),
                 false, "mkv", "h264", "aac", false));
+        // 未设自定义路径时按默认源目录扫描（与 SettingService.resolveSourceRoot 的默认行为一致）
+        when(settingService.resolveSourceRoot(anyString()))
+                .thenAnswer(invocation -> invocation.getArgument(0));
         when(importRepo.findBySourcePath(anyString())).thenReturn(Optional.empty());
         when(importRepo.saveAndFlush(any())).thenAnswer(invocation -> {
             MediaImportRecord record = invocation.getArgument(0);

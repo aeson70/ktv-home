@@ -731,7 +731,9 @@ public class MediaImportService {
     }
 
     private Path sourceRoot() {
-        return Path.of(settingService.resolveSourceRoot(props.getSourceLibraryPath())).toAbsolutePath().normalize();
+        String root = settingService.resolveSourceRoot(props.getSourceLibraryPath());
+        if (root == null || root.isBlank()) root = props.getSourceLibraryPath();
+        return Path.of(root).toAbsolutePath().normalize();
     }
 
     /** 源文件是否在有效扫描源目录或默认源目录内（换路径后旧记录仍可删除） */
