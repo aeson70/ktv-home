@@ -27,7 +27,7 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  IMAGE_NAME: ghcr.io/zhayinggang/ktv-home
+  IMAGE_NAME: ghcr.io/aeson70/ktv-home
   RAW_RELEASE_VERSION: ${{ inputs.version || github.ref_name }}
 
 jobs:
@@ -83,7 +83,7 @@ jobs:
         with:
           distribution: temurin
           java-version: "17"
-      - uses: android-actions/setup-android@v3
+      - uses: android-actions/setup-android@v4
       - name: Install Android SDK
         run: sdkmanager "platforms;android-35" "build-tools;35.0.0"
       - uses: gradle/actions/setup-gradle@v4

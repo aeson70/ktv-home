@@ -42,6 +42,20 @@ describe('usePlayerStore', () => {
     expect(p.lastEffect).toBe('clap')
   })
 
+  it('score_result 记录 AI 评分', () => {
+    const p = usePlayerStore()
+    p.handleEvent('score_result', { queue_id: 1, song_title: '晴天', artist: '周杰伦', score: 92, comment: '音准稳健' })
+    expect(p.lastScore.score).toBe(92)
+    expect(p.lastScore.song_title).toBe('晴天')
+  })
+
+  it('切歌后清空上一次评分', () => {
+    const p = usePlayerStore()
+    p.handleEvent('score_result', { queue_id: 1, song_title: '晴天', score: 92, comment: '好' })
+    p.handleEvent('sync_full', { ...snapshot, playing: { queueId: 2, song: { id: 11, title: '七里香' }, orderedByNick: '小红' } })
+    expect(p.lastScore).toBeNull()
+  })
+
   it('无播放时 nowPlaying 为 null', () => {
     const p = usePlayerStore()
     p.handleEvent('sync_full', { ...snapshot, playing: null })

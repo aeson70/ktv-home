@@ -11,6 +11,7 @@ import com.homektv.repo.QueueItemRepository;
 import com.homektv.repo.SongRepository;
 import com.homektv.repo.SongFileRepository;
 import com.homektv.web.ApiException;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -29,15 +30,17 @@ public class PlaybackService {
     private final SongRepository songRepo;
     private final PlayHistoryRepository historyRepo;
     private final SongFileRepository fileRepo;
+    private final ApplicationEventPublisher publisher;
 
     public PlaybackService(PlayerStateRepository playerRepo, QueueItemRepository queueRepo,
                            SongRepository songRepo, PlayHistoryRepository historyRepo,
-                           SongFileRepository fileRepo) {
+                           SongFileRepository fileRepo, ApplicationEventPublisher publisher) {
         this.playerRepo = playerRepo;
         this.queueRepo = queueRepo;
         this.songRepo = songRepo;
         this.historyRepo = historyRepo;
         this.fileRepo = fileRepo;
+        this.publisher = publisher;
     }
 
     /** 开始/恢复播放。若当前无曲目，尝试从队列取第一首。 */
@@ -82,13 +85,27 @@ public class PlaybackService {
         return playerRepo.save(ps);
     }
 
-    /** 播放完成（TV 上报）：当前行标记 done，写历史，推进下一首。 */
+    /** 播放完成（TV 上报）：当前行标记 done，写历史，推进下一首，并发布演唱完成事件供 AI 评分。 */
     @Transactional
     public PlayerState onFinished() {
         PlayerState ps = playerRepo.getSingleton();
+        SongFinishedEvent finished = currentSongFinishedEvent(ps);
         markCurrent(ps, QueueService.DONE, true);
         advanceToNext(ps);
-        return playerRepo.save(ps);
+        PlayerState saved = playerRepo.save(ps);
+        if (finished != null) publisher.publishEvent(finished);
+        return saved;
+    }
+
+    /** 取当前正在播的曲目信息（推进之前），供演唱完成事件使用；无当前曲目返回 null。 */
+    private SongFinishedEvent currentSongFinishedEvent(PlayerState ps) {
+        if (ps.getCurrentQueueId() == null) return null;
+        return queueRepo.findById(ps.getCurrentQueueId())
+                .filter(item -> QueueService.PLAYING.equals(item.getStatus()))
+                .flatMap(item -> songRepo.findById(item.getSongId())
+                        .map(song -> new SongFinishedEvent(item.getId(), song.getId(),
+                                song.getTitle(), song.getArtist(), song.getLanguage())))
+                .orElse(null);
     }
 
     @Transactional

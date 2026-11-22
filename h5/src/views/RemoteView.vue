@@ -11,6 +11,7 @@
           <div class="bar"><i :style="{ width: progressPct + '%' }"></i></div>
         </div>
       </div>
+      <div v-if="player.lastScore" class="score-banner">🎤 《{{ player.lastScore.song_title }}》AI 评分 <b>{{ player.lastScore.score }} 分</b> · {{ player.lastScore.comment }}</div>
     </section>
 
     <!-- 主控制排 / Main Controls -->
@@ -44,10 +45,10 @@
       <button v-if="canVocal" class="track-fix" @click="swapVocalTracks">原唱和伴唱弄反了？纠正并记住</button>
     </section>
 
-    <!-- 氛围音效（P3.1 完整；此处已可发送）/ Ambience Effects (P3.1 complete; available here) -->
+    <!-- 氛围音效（6 个：欢呼/鼓掌/尖叫/口哨/喝倒彩/再来一首）/ Ambience Effects (6 reactions) -->
     <section class="sec">
       <div class="section-label"><b>现场气氛</b><span>发送到电视</span></div>
-      <div class="grid4">
+      <div class="grid3">
         <button v-for="e in effects" :key="e.id" class="fx" @click="effect(e)">
           <component :is="e.icon" :size="20" />{{ e.label }}
         </button>
@@ -74,7 +75,7 @@ import { makeControls } from '../api/client'
 import { useToast } from '../composables/useToast'
 import { confirmDialog } from '../composables/useDialog'
 import TabBar from '../components/TabBar.vue'
-import { GlassWater, Hand, Lightbulb, Megaphone, Minus, Music2, PartyPopper, Pause, Play, Plus, RotateCcw, SkipForward } from 'lucide-vue-next'
+import { AudioLines, Hand, Lightbulb, Megaphone, Minus, Music2, PartyPopper, Pause, Play, Plus, Repeat, RotateCcw, SkipForward, Wind } from 'lucide-vue-next'
 
 const player = usePlayerStore()
 const user = useUserStore()
@@ -104,8 +105,9 @@ const vol = ref(player.volume)
 watch(() => player.volume, v => { vol.value = v })
 
 const effects = [
-  { id: 'clap', icon: Hand, label: '鼓掌' }, { id: 'cheer', icon: PartyPopper, label: '欢呼' },
-  { id: 'boo', icon: Megaphone, label: '倒彩' }, { id: 'toast', icon: GlassWater, label: '干杯' }
+  { id: 'cheer', icon: PartyPopper, label: '欢呼' }, { id: 'clap', icon: Hand, label: '鼓掌' },
+  { id: 'scream', icon: AudioLines, label: '尖叫' }, { id: 'whistle', icon: Wind, label: '口哨' },
+  { id: 'boo', icon: Megaphone, label: '喝倒彩' }, { id: 'encore', icon: Repeat, label: '再来一首' }
 ]
 
 /**
@@ -174,9 +176,9 @@ async function swapVocalTracks() {
   catch (e) { toast(e.message || '纠正失败') }
 }
 /**
- * 发送氛围音效（鼓掌/欢呼/倒彩/干杯）。
+ * 发送氛围音效（欢呼/鼓掌/尖叫/口哨/喝倒彩/再来一首）。
  *
- * Send an ambience effect (clap, cheer, boo, toast).
+ * Send an ambience effect (cheer, clap, scream, whistle, boo, encore).
  *
  * @param {{ id: string, ic: string, label: string }} e 音效对象 / effect object
  */
@@ -221,6 +223,9 @@ async function effect(e) {
 .seg div { flex: 1; text-align: center; padding: 10px; font-size: 14px; color: var(--dim); }
 .seg div.on { border-radius:4px;background:var(--gold);color:#211d14;font-weight:700; }
 .grid4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+.grid3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+.score-banner { margin-top: 10px; padding: 8px 12px; border-radius: 10px; background: rgba(255, 213, 79, .12); border: 1px solid rgba(255, 213, 79, .35); font-size: 13px; }
+.score-banner b { color: #ffd54f; font-size: 15px; }
 .fx { height:58px;display:grid;place-items:center;align-content:center;gap:5px;background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:6px 4px;color:var(--dim);font-size:10px; }
 .fx svg { color:var(--cyan); }
 .tip { display:flex;align-items:center;justify-content:center;gap:5px;font-size:11px;color:var(--dim2);margin-top:20px; }

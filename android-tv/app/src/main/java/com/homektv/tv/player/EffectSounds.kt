@@ -20,6 +20,9 @@ object EffectSounds {
             "cheer" to cheer(),
             "boo" to boo(),
             "toast" to toast(),
+            "scream" to scream(),
+            "whistle" to whistle(),
+            "encore" to encore(),
         )
     }
 
@@ -90,6 +93,77 @@ object EffectSounds {
         addBell(samples, startMs = 0, frequency = 1_480.0, gain = 0.42)
         addBell(samples, startMs = 105, frequency = 1_920.0, gain = 0.36)
         addBell(samples, startMs = 175, frequency = 1_660.0, gain = 0.28)
+        return EffectSound(SAMPLE_RATE, samples)
+    }
+
+    /** 尖叫：三声高音颤音，先扬后落。/ Scream: three high voices with fast vibrato, rising then falling. */
+    private fun scream(): EffectSound {
+        val samples = buffer(1_300)
+        val voices = doubleArrayOf(980.0, 1180.0, 1420.0)
+        voices.forEachIndexed { voice, baseFrequency ->
+            val delay = voice * SAMPLE_RATE / 22
+            for (index in delay until samples.size) {
+                val time = (index - delay).toDouble() / SAMPLE_RATE
+                val slide = 1.0 + 0.22 * sin(PI * (time / 1.3).coerceAtMost(1.0))
+                val vibrato = 1.0 + 0.06 * sin(2.0 * PI * 7.0 * time)
+                val rise = (time / 0.1).coerceAtMost(1.0)
+                val fade = exp(-time * 1.4)
+                val tone = sin(2.0 * PI * baseFrequency * slide * vibrato * time)
+                mix(samples, index, tone * rise * fade * 0.11)
+            }
+        }
+        return EffectSound(SAMPLE_RATE, samples)
+    }
+
+    /** 口哨：经典两声狼哨，上滑再下滑。/ Whistle: classic two-tone wolf whistle, sliding up then down. */
+    private fun whistle(): EffectSound {
+        val samples = buffer(1_400)
+        for (index in samples.indices) {
+            val time = index.toDouble() / SAMPLE_RATE
+            val frequency = when {
+                time < 0.55 -> 1900.0 + (2600.0 - 1900.0) * (time / 0.55)
+                time < 0.65 -> 2600.0
+                else -> 2600.0 - (2600.0 - 1500.0) * ((time - 0.65) / 0.75)
+            }
+            val vibrato = 1.0 + 0.012 * sin(2.0 * PI * 5.5 * time)
+            val envelope = when {
+                time < 0.06 -> time / 0.06
+                time > 1.25 -> ((1.4 - time) / 0.15).coerceIn(0.0, 1.0)
+                else -> 1.0
+            }
+            mix(samples, index, sin(2.0 * PI * frequency * vibrato * time) * envelope * 0.22)
+        }
+        return EffectSound(SAMPLE_RATE, samples)
+    }
+
+    /** 再来一首：四拍掌声 + 尾段欢呼上扬。/ Encore: four-beat claps with a cheer swell at the end. */
+    private fun encore(): EffectSound {
+        val samples = buffer(1_500)
+        var random = 0xE9C0
+        doubleArrayOf(0.05, 0.42, 0.79, 1.16).forEach { beat ->
+            val center = (beat * SAMPLE_RATE).toInt()
+            val width = (SAMPLE_RATE * 0.035).toInt()
+            for (offset in -width..width) {
+                val index = center + offset
+                if (index !in samples.indices) continue
+                random = random xor (random shl 13)
+                random = random xor (random ushr 17)
+                random = random xor (random shl 5)
+                val noise = ((random and 0xffff) / 32767.5) - 1.0
+                val envelope = exp(-4.5 * kotlin.math.abs(offset).toDouble() / width)
+                mix(samples, index, noise * envelope * 0.6)
+            }
+        }
+        val voices = doubleArrayOf(410.0, 565.0, 735.0)
+        voices.forEachIndexed { voice, baseFrequency ->
+            val delay = (0.85 * SAMPLE_RATE).toInt() + voice * SAMPLE_RATE / 40
+            for (index in delay until samples.size) {
+                val time = (index - delay).toDouble() / SAMPLE_RATE
+                val rise = (time / 0.1).coerceAtMost(1.0)
+                val tone = sin(2.0 * PI * baseFrequency * time)
+                mix(samples, index, tone * rise * 0.1)
+            }
+        }
         return EffectSound(SAMPLE_RATE, samples)
     }
 

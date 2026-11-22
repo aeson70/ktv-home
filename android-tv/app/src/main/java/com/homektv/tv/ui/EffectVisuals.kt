@@ -1,7 +1,7 @@
 package com.homektv.tv.ui
 
 /** Supported visual effect categories. / 支持的视觉特效类别。 */
-enum class EffectVisualKind { CLAP, CHEER, BOO, TOAST }
+enum class EffectVisualKind { CLAP, CHEER, BOO, TOAST, SCREAM, WHISTLE, ENCORE }
 
 /** Visual effect configuration. / 视觉特效配置。 */
 data class EffectVisualSpec(
@@ -25,6 +25,12 @@ object EffectVisuals {
             listOf(0xffa78bfa, 0xff34d399, 0xffff7aa2)),
         EffectVisualSpec("toast", EffectVisualKind.TOAST, "干杯！", "🍻", 2_100L, 48,
             listOf(0xffffd166, 0xffffa62b, 0xfffff3b0)),
+        EffectVisualSpec("scream", EffectVisualKind.SCREAM, "尖叫！", "😱", 2_000L, 60,
+            listOf(0xffff4d6d, 0xffff8fa3, 0xffffffff)),
+        EffectVisualSpec("whistle", EffectVisualKind.WHISTLE, "口哨声！", "🎵", 2_000L, 48,
+            listOf(0xff4cc9f0, 0xff90e0ef, 0xffffffff)),
+        EffectVisualSpec("encore", EffectVisualKind.ENCORE, "再来一首！", "🎤", 2_400L, 90,
+            listOf(0xffffd54f, 0xffff4d6d, 0xff06d6a0, 0xff4cc9f0)),
     )
 
     val ids: Set<String> = specs.mapTo(linkedSetOf()) { it.id }

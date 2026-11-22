@@ -71,6 +71,7 @@ class MainActivity : AppCompatActivity(), KtvSocket.Listener {
     private var engine: PlaybackEngine? = null
     private var effectPlayer: EffectPlayer? = null
     private var effectOverlay: EffectOverlayView? = null
+    private var scoreOverlay: ScoreOverlayView? = null
     private var microphoneMonitor: MicrophoneMonitor? = null
     private var microphoneActive = false
     private var releaseCheckInFlight = false
@@ -205,6 +206,13 @@ class MainActivity : AppCompatActivity(), KtvSocket.Listener {
             }
         }
         effectOverlay = EffectOverlayView(this).also { overlay ->
+            overlay.visibility = View.GONE
+            binding.root.addView(
+                overlay,
+                FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT),
+            )
+        }
+        scoreOverlay = ScoreOverlayView(this).also { overlay ->
             overlay.visibility = View.GONE
             binding.root.addView(
                 overlay,
@@ -664,6 +672,10 @@ class MainActivity : AppCompatActivity(), KtvSocket.Listener {
     override fun onEffect(effectId: String) {
         effectPlayer?.play(effectId, currentVolume, currentMuted)
         effectOverlay?.play(effectId)
+    }
+
+    override fun onScore(score: Int, comment: String, songTitle: String) {
+        runOnUiThread { scoreOverlay?.show(score, comment, songTitle) }
     }
 
     // ---- 播放驱动（P1.28） ----

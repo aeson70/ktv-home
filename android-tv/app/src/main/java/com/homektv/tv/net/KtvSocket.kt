@@ -36,6 +36,8 @@ class KtvSocket(
         fun onProgress(positionMs: Long) {}
         /** 氛围音效（P3.1 TV 混播）。 */
         fun onEffect(effectId: String) {}
+        /** AI 演唱评分结果。 */
+        fun onScore(score: Int, comment: String, songTitle: String) {}
         /** toast 提示。 */
         fun onToast(text: String) {}
         /** 连接状态变化：true=已连上并完成一次同步，false=断开/重连中。 */
@@ -154,6 +156,13 @@ class KtvSocket(
             "effect_play" -> {
                 val id = (payload as? JsonObject)?.get("effect_id")?.jsonPrimitive?.contentOrNullSafe().orEmpty()
                 listener.onEffect(id)
+            }
+            "score_result" -> {
+                val obj = payload as? JsonObject ?: return
+                val score = obj["score"]?.jsonPrimitive?.intOrNull ?: return
+                val comment = obj["comment"]?.jsonPrimitive?.contentOrNullSafe().orEmpty()
+                val title = obj["song_title"]?.jsonPrimitive?.contentOrNullSafe().orEmpty()
+                listener.onScore(score, comment, title)
             }
             "toast" -> {
                 val txt = (payload as? JsonObject)?.get("text")?.jsonPrimitive?.contentOrNullSafe().orEmpty()

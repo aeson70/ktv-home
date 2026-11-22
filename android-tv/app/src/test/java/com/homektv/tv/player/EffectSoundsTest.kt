@@ -11,7 +11,7 @@ import org.junit.Test
 class EffectSoundsTest {
     @Test
     fun exposesAllRemoteEffectIds() {
-        assertEquals(setOf("clap", "cheer", "boo", "toast"), EffectSounds.ids)
+        assertEquals(setOf("clap", "cheer", "boo", "toast", "scream", "whistle", "encore"), EffectSounds.ids)
         EffectSounds.ids.forEach { assertNotNull(EffectSounds.find(it)) }
         assertNull(EffectSounds.find("unknown"))
     }

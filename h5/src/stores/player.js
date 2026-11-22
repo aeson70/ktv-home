@@ -21,7 +21,8 @@ export const usePlayerStore = defineStore('player', {
     queue: [],             // 点歌队列 | [{queueId, song, orderedBy, orderedByNick, status}]
     tvOnline: true,        // TV 是否在线（P2.13） | Whether the TV is online (P2.13)
     connectedPhones: 0,
-    lastEffect: null
+    lastEffect: null,
+    lastScore: null     // 最近一次 AI 演唱评分 | {queue_id, song_title, artist, score, comment}
   }),
   getters: {
     queueCount: (s) => s.queue.length,
@@ -81,6 +82,9 @@ export const usePlayerStore = defineStore('player', {
         case 'effect_play':
           this.lastEffect = payload?.effect_id ?? null
           break
+        case 'score_result':
+          this.lastScore = payload ?? null
+          break
         default:
           break
       }
@@ -98,9 +102,12 @@ export const usePlayerStore = defineStore('player', {
       // now_playing / player_state 等事件 payload 也是完整 snapshot
       // Events like now_playing / player_state also carry a full snapshot payload
       const playing = snap.playing ?? null
+      const prevQueueId = this.nowPlaying?.queueId ?? null
       this.nowPlaying = playing
         ? { queueId: playing.queueId, song: playing.song, orderedByNick: playing.orderedByNick }
         : null
+      // 切到新歌后清空上一次评分
+      if ((playing?.queueId ?? null) !== prevQueueId) this.lastScore = null
       this.state = snap.state ?? 'idle'
       this.volume = snap.volume ?? this.volume
       this.muted = snap.muted ?? false

@@ -42,7 +42,7 @@ class ControlControllerTest {
         WsBroadcaster broadcaster = new WsBroadcaster(new ObjectMapper()) {
             @Override public void broadcast(WsEvent event) { broadcast.set(event); }
         };
-        PlaybackService playbackService = new PlaybackService(null, null, null, null, null);
+        PlaybackService playbackService = new PlaybackService(null, null, null, null, null, null);
         ControlController controller = new ControlController(
                 queueService, playbackService, snapshotService, userService, null, broadcaster);
 
@@ -59,7 +59,7 @@ class ControlControllerTest {
         AtomicReference<WsEvent> broadcast = new AtomicReference<>();
         QueueSnapshot snapshot = new QueueSnapshot(null, List.of(), "playing", 60, false,
                 "accompaniment", true, 1);
-        PlaybackService playbackService = new PlaybackService(null, null, null, null, null) {
+        PlaybackService playbackService = new PlaybackService(null, null, null, null, null, null) {
             @Override public com.homektv.domain.PlayerState restart() { return null; }
         };
         SnapshotService snapshotService = new SnapshotService(null, null, null, null, null) {

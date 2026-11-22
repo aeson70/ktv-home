@@ -90,7 +90,7 @@ class EffectOverlayView(context: Context) : View(context) {
             if (local <= 0f) return@forEach
             canvas.save()
             val x = particle.x * width + particle.vx * width * local
-            val gravity = if (burst.spec.kind == EffectVisualKind.CHEER) 0.5f else -0.08f
+            val gravity = if (burst.spec.kind == EffectVisualKind.CHEER || burst.spec.kind == EffectVisualKind.ENCORE) 0.5f else -0.08f
             val y = particle.y * height + particle.vy * height * local + gravity * height * local * local
             canvas.rotate(particle.rotation + particle.rotationSpeed * local, x, y)
             paint.alpha = (255 * fade * (1f - local * 0.35f)).toInt().coerceIn(0, 255)
@@ -180,6 +180,30 @@ class EffectOverlayView(context: Context) : View(context) {
                         delay = if (index < 2) 0f else random.nextFloat() * 0.32f,
                     )
                 }
+                EffectVisualKind.SCREAM -> Particle(
+                    x = random.nextFloat(), y = 1.06f + random.nextFloat() * 0.18f,
+                    vx = (random.nextFloat() - 0.5f) * 0.3f, vy = -0.9f - random.nextFloat() * 0.5f,
+                    size = 26f + random.nextFloat() * 34f, rotation = random.nextFloat() * 30f - 15f,
+                    rotationSpeed = random.nextFloat() * 120f - 60f,
+                    color = spec.colors[index % spec.colors.size].toInt(), glyph = if (index % 2 == 0) "😱" else null,
+                    delay = random.nextFloat() * 0.3f,
+                )
+                EffectVisualKind.WHISTLE -> Particle(
+                    x = random.nextFloat(), y = 0.9f + random.nextFloat() * 0.2f,
+                    vx = (random.nextFloat() - 0.5f) * 0.2f, vy = -0.35f - random.nextFloat() * 0.25f,
+                    size = 22f + random.nextFloat() * 26f, rotation = random.nextFloat() * 20f - 10f,
+                    rotationSpeed = random.nextFloat() * 40f - 20f,
+                    color = spec.colors[index % spec.colors.size].toInt(), glyph = if (index % 2 == 0) "🎵" else null,
+                    delay = random.nextFloat() * 0.4f,
+                )
+                EffectVisualKind.ENCORE -> Particle(
+                    x = random.nextFloat(), y = -0.1f - random.nextFloat() * 0.45f,
+                    vx = (random.nextFloat() - 0.5f) * 0.3f, vy = 0.65f + random.nextFloat() * 0.45f,
+                    size = 8f + random.nextFloat() * 13f, rotation = random.nextFloat() * 180f,
+                    rotationSpeed = random.nextFloat() * 720f - 360f,
+                    color = spec.colors[index % spec.colors.size].toInt(), glyph = if (index % 18 == 0) "🎤" else null,
+                    delay = random.nextFloat() * 0.28f,
+                )
             }
         }
 }
