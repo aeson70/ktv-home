@@ -292,7 +292,7 @@ public class MediaImportService {
             }
             try {
                 Path source = Path.of(record.getSourcePath()).toAbsolutePath().normalize();
-                if (!source.startsWith(sourceRoot())) {
+                if (!isWithinSourceRoots(source)) {
                     throw new IOException("拒绝删除扫描源目录以外的文件：" + source);
                 }
                 Files.deleteIfExists(source);
@@ -348,7 +348,7 @@ public class MediaImportService {
                 || record.getSongFileId() == null || record.getOutputPath() == null) return false;
         Path source = Path.of(record.getSourcePath()).toAbsolutePath().normalize();
         Path output = Path.of(record.getOutputPath()).toAbsolutePath().normalize();
-        if (!source.startsWith(sourceRoot()) || !output.startsWith(targetRoot()) || source.equals(output)
+        if (!isWithinSourceRoots(source) || !output.startsWith(targetRoot()) || source.equals(output)
                 || !Files.isRegularFile(source) || !Files.isRegularFile(output)) return false;
         return songFileRepo.findById(record.getSongFileId())
                 .filter(SongFile::isValid)
@@ -433,22 +433,28 @@ public class MediaImportService {
                     "曲库中已存在相同 MD5，跳过移动", false, true, false, null, null);
             return ScanOutcome.OUTPUT_DUPLICATE;
         }
-        Path output = moveToTarget(source, targetRoot);
+        MoveResult moved = moveToTarget(source, targetRoot);
+        Path output = moved.output();
         LibraryScanService.IngestResult ingest;
         try {
             String outputMd5 = hashService.md5(output);
             if (!Objects.equals(sourceMd5, outputMd5)) {
-                throw new IOException("移动后文件 MD5 校验失败");
+                throw new IOException("入库后文件 MD5 校验失败");
             }
             ingest = scanService.ingestLibraryFile(output, source, sourceMd5, outputMd5, false);
             if (!ingest.imported() || ingest.songId() == null || ingest.songFileId() == null) {
                 throw new IOException("移动后的文件未能写入 KTV 曲库");
             }
         } catch (Exception e) {
-            restoreMovedFile(output, source);
+            if (moved.copied()) {
+                try { Files.deleteIfExists(output); } catch (IOException ignored) { }
+            } else {
+                restoreMovedFile(output, source);
+            }
             throw e;
         }
-        markSongFileSourceDeleted(ingest.songFileId());
+        // 复制入库时原文件保留，不标记源已删除
+        if (!moved.copied()) markSongFileSourceDeleted(ingest.songFileId());
         if (existing != null) importRepo.delete(existing);
         return ScanOutcome.COPIED;
     }
@@ -679,10 +685,23 @@ public class MediaImportService {
 
     private record DirectCopyDecision(boolean transcodeRequired, String reason) {}
 
-    private Path moveToTarget(Path source, Path targetRoot) throws IOException {
+    private record MoveResult(Path output, boolean copied) {}
+
+    private MoveResult moveToTarget(Path source, Path targetRoot) throws IOException {
         Path output = uniqueTarget(targetRoot.resolve(source.getFileName()));
-        Files.move(source, output);
-        return output;
+        try {
+            Files.move(source, output);
+            return new MoveResult(output, false);
+        } catch (IOException moveError) {
+            // 只读源（如 /host-data）无法移动：复制入库，原文件保留
+            try {
+                Files.copy(source, output, StandardCopyOption.COPY_ATTRIBUTES);
+                return new MoveResult(output, true);
+            } catch (IOException copyError) {
+                moveError.addSuppressed(copyError);
+                throw moveError;
+            }
+        }
     }
 
     private void restoreMovedFile(Path output, Path source) {
@@ -712,7 +731,14 @@ public class MediaImportService {
     }
 
     private Path sourceRoot() {
-        return Path.of(props.getSourceLibraryPath()).toAbsolutePath().normalize();
+        return Path.of(settingService.resolveSourceRoot(props.getSourceLibraryPath())).toAbsolutePath().normalize();
+    }
+
+    /** 源文件是否在有效扫描源目录或默认源目录内（换路径后旧记录仍可删除） */
+    private boolean isWithinSourceRoots(Path source) {
+        Path effective = sourceRoot();
+        Path def = Path.of(props.getSourceLibraryPath()).toAbsolutePath().normalize();
+        return source.startsWith(effective) || source.startsWith(def);
     }
 
     private Path targetRoot() {
@@ -776,7 +802,7 @@ public class MediaImportService {
 
     private void deleteSourceAndCompanions(MediaImportRecord record) throws IOException {
         Path source = Path.of(record.getSourcePath()).toAbsolutePath().normalize();
-        if (!source.startsWith(sourceRoot())) throw new IOException("拒绝删除扫描源目录以外的文件");
+        if (!isWithinSourceRoots(source)) throw new IOException("拒绝删除扫描源目录以外的文件");
         Files.deleteIfExists(source);
         if (record.getOutputPath() != null) {
             Path output = Path.of(record.getOutputPath()).toAbsolutePath().normalize();

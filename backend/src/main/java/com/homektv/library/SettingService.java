@@ -11,6 +11,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.HashSet;
+import java.nio.file.Files;
+import java.nio.file.Path;
 
 /**
  * 系统设置读写（P2.6，详设§8 ADM-03）。settings 表 key→JSONB value。
@@ -20,6 +22,8 @@ public class SettingService {
 
     public static final String LIBRARY_WATCH_ENABLED = "library_watch_enabled";
     public static final String DELETE_SOURCE_AFTER_TRANSCODE = "delete_source_after_transcode";
+    /** 自定义扫描源路径（宿主机写法，如 /vol2/1000/mv；空表示用默认路径）。 */
+    public static final String CUSTOM_SOURCE_PATH = "custom_source_path";
 
     public static final Map<String, Object> TRANSCODE_DEFAULTS = Map.of(
             "direct_copy_containers", List.of("mp4", "m4v", "mkv"),
@@ -39,7 +43,8 @@ public class SettingService {
             Map.entry("standby_subtitle", "手机点歌，电视欢唱\n一家人的客厅 KTV"), Map.entry("standby_source", "mixed"),
             Map.entry("standby_song_ids", List.of()), Map.entry("standby_interval_sec", 8),
             Map.entry("display_address", ""), Map.entry("standby_logo_path", ""),
-            Map.entry(DELETE_SOURCE_AFTER_TRANSCODE, false), Map.entry("room_host_user_id", 0L));
+            Map.entry(DELETE_SOURCE_AFTER_TRANSCODE, false), Map.entry("room_host_user_id", 0L),
+            Map.entry(CUSTOM_SOURCE_PATH, ""));
     private static final Set<String> TRANSCODE_KEYS = TRANSCODE_DEFAULTS.keySet();
     private static final Set<String> ALLOWED_KEYS = new HashSet<>();
     static { ALLOWED_KEYS.addAll(TRANSCODE_DEFAULTS.keySet()); ALLOWED_KEYS.addAll(GENERAL_DEFAULTS.keySet()); }
@@ -67,6 +72,51 @@ public class SettingService {
 
     public boolean isLibraryWatchEnabled() {
         return Boolean.TRUE.equals(getAll().get(LIBRARY_WATCH_ENABLED));
+    }
+
+    /** 宿主机路径 → 容器内路径：/vol2/1000/... 对应只读挂载的 /host-data/... */
+    public static String toContainerPath(String raw) {
+        if (raw == null) return "";
+        String p = raw.trim();
+        if (p.equals("/vol2/1000")) return "/host-data";
+        if (p.startsWith("/vol2/1000/")) return "/host-data/" + p.substring("/vol2/1000/".length());
+        return p;
+    }
+
+    /** 容器内路径 → 宿主机路径（展示用）：/host-data/... 对应 /vol2/1000/... */
+    public static String toHostPath(String containerPath) {
+        if (containerPath == null) return "";
+        String p = containerPath.trim();
+        if (p.equals("/host-data")) return "/vol2/1000";
+        if (p.startsWith("/host-data/")) return "/vol2/1000/" + p.substring("/host-data/".length());
+        return p;
+    }
+
+    /** 当前自定义源路径（宿主机写法，原样返回；空表示未设置） */
+    public String getCustomSourcePath() {
+        Object v = getAll().get(CUSTOM_SOURCE_PATH);
+        return v == null ? "" : String.valueOf(v).trim();
+    }
+
+    /** 有效扫描源根目录（容器内路径）：自定义路径优先，否则用默认路径 */
+    public String resolveSourceRoot(String defaultRoot) {
+        String custom = getCustomSourcePath();
+        if (custom.isBlank()) return defaultRoot;
+        return toContainerPath(custom);
+    }
+
+    /** 校验自定义源路径并返回容器内路径；空白表示恢复默认；非法时抛错 */
+    public static String validateCustomSourcePath(String raw) {
+        if (raw == null || raw.isBlank()) return "";
+        String container = toContainerPath(raw);
+        Path p = Path.of(container).toAbsolutePath().normalize();
+        boolean allowed = p.equals(Path.of("/host-data")) || p.startsWith("/host-data/")
+                || p.equals(Path.of("/source-music")) || p.startsWith("/source-music/");
+        if (!allowed) throw new com.homektv.web.ApiException("SOURCE_PATH_NOT_ALLOWED",
+                "曲库路径只允许在 /host-data（宿主机 /vol2/1000）或 /source-music 下");
+        if (!Files.isDirectory(p)) throw new com.homektv.web.ApiException("SOURCE_PATH_MISSING",
+                "目录不存在：" + p);
+        return p.toString();
     }
 
     /** 批量写入设置 */

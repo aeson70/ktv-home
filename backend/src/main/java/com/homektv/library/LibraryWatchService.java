@@ -66,7 +66,7 @@ public class LibraryWatchService {
 
     private synchronized void startWatching() {
         if (running) return;
-        Path root = Path.of(props.getSourceLibraryPath());
+        Path root = Path.of(settingService.resolveSourceRoot(props.getSourceLibraryPath()));
         if (!Files.isDirectory(root)) {
             log.warn("曲库目录不存在，跳过自动监听：{}", root);
             return;

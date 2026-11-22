@@ -9,6 +9,31 @@
       </div>
     </header>
 
+    <!-- 曲库路径设置 / Source library path settings -->
+    <section class="path-panel">
+      <div class="path-info">
+        <strong>曲库路径</strong>
+        <span>当前扫描：{{ pathView.effective || '—' }}</span>
+        <small v-if="pathView.custom">自定义（宿主机）：{{ pathView.custom }} · 只读来源会复制入库，原文件保留</small>
+        <small v-else>默认路径：{{ pathView.defaultPath || '/source-music' }} · 填宿主机路径如 /vol2/1000/mv，不用 SSH、不用重启容器</small>
+      </div>
+      <div class="path-edit">
+        <input v-model.trim="pathInput" placeholder="/vol2/1000/mv 或 /host-data/mv" @keyup.enter="savePath" />
+        <button class="secondary" @click="toggleBrowse">{{ browsing ? '收起浏览' : '浏览' }}</button>
+        <button class="primary" :disabled="saving" @click="savePath">{{ saving ? '保存中…' : '保存路径' }}</button>
+        <button class="secondary" :disabled="!pathView.custom || saving" @click="resetPath">恢复默认</button>
+        <button class="secondary" @click="rescan">重新扫描</button>
+      </div>
+      <div v-if="browsing" class="browse-panel">
+        <div class="browse-head"><span>{{ browsePath }}</span><button class="link" :disabled="!browseParent" @click="browseUp">上级目录</button></div>
+        <div class="browse-list">
+          <button v-for="d in browseDirs" :key="d.path" class="browse-item" @click="browseInto(d.path)">{{ d.name }}</button>
+          <span v-if="!browseDirs.length" class="empty">此目录下没有子目录</span>
+        </div>
+        <div class="browse-foot"><button class="primary" @click="pickBrowsePath">选择此目录</button></div>
+      </div>
+    </section>
+
     <!-- 筛选面板 / Filter panel -->
     <section class="filter-panel">
       <label><span>关键词</span><input v-model.trim="filters.keyword" placeholder="歌名、歌手或文件名" @keyup.enter="search" /></label>
@@ -75,6 +100,14 @@ import { alertDialog, confirmDialog } from '../../composables/useDialog'
 // 列表数据、分页、选中项 / List data, pagination, selected items
 const rows = ref([]), total = ref(0), page = ref(0), totalPages = ref(1), selected = ref([])
 const cleaning = ref(false)
+// 曲库路径设置 / Source library path settings
+const pathView = ref({ custom: '', effective: '', defaultPath: '' })
+const pathInput = ref('')
+const saving = ref(false)
+const browsing = ref(false)
+const browsePath = ref('/host-data')
+const browseParent = ref('')
+const browseDirs = ref([])
 // 默认展示全部源素材；格式筛选目前没有单独的界面控件。
 const filters = reactive({ keyword: '', status: '', formatAnalysis: '' })
 const progress = ref({ running:false, total:0, completed:0 })
@@ -88,6 +121,72 @@ const selectedTranscodableCount = computed(() => rows.value.filter(x => selected
 
 /** 转码进度百分比 / Transcode progress percentage */
 const progressPercent = computed(() => progress.value.total ? Math.round(progress.value.completed * 100 / progress.value.total) : 0)
+
+/**
+ * 加载当前曲库路径设置。
+ * Load the current source library path setting.
+ */
+async function loadPath() {
+  pathView.value = await api.adminSourcePath().catch(() => pathView.value)
+  pathInput.value = pathView.value.custom || ''
+}
+
+/**
+ * 保存自定义曲库路径。
+ * Save the custom source library path.
+ */
+async function savePath() {
+  saving.value = true
+  try {
+    pathView.value = await api.adminSaveSourcePath(pathInput.value || '')
+    pathInput.value = pathView.value.custom || ''
+    await alertDialog(`曲库路径已保存，当前扫描：${pathView.value.effective}。只读来源会复制入库，原文件保留。`, { title: '保存成功', tone: 'success' })
+  } catch (e) { await alertDialog(e.message || '保存失败') }
+  finally { saving.value = false }
+}
+
+/** 恢复默认曲库路径 / Reset to the default source library path */
+async function resetPath() { pathInput.value = ''; await savePath() }
+
+/**
+ * 重新扫描当前曲库路径。
+ * Rescan the current source library path.
+ */
+async function rescan() {
+  try { await api.adminStartScan(); await alertDialog('已开始扫描，请稍后刷新查看进度。', { title: '扫描已开始' }) }
+  catch (e) { await alertDialog(e.message || '扫描启动失败') }
+}
+
+/**
+ * 加载指定目录的子目录列表。
+ * Load subdirectories of the given directory.
+ *
+ * @param {string} path - 目录路径 / directory path
+ */
+async function loadBrowse(path) {
+  const r = await api.adminBrowseDirs(path || '/host-data')
+  browsePath.value = r.path; browseParent.value = r.parent || ''; browseDirs.value = r.dirs || []
+}
+
+/** 展开/收起目录浏览 / Toggle the directory browser */
+async function toggleBrowse() {
+  browsing.value = !browsing.value
+  if (browsing.value) { try { await loadBrowse(browsePath.value) } catch (e) { await alertDialog(e.message || '浏览失败') } }
+}
+
+/** 进入子目录 / Enter a subdirectory */
+async function browseInto(path) { try { await loadBrowse(path) } catch (e) { await alertDialog(e.message || '浏览失败') } }
+
+/** 返回上级目录 / Go to the parent directory */
+async function browseUp() { if (browseParent.value) await browseInto(browseParent.value) }
+
+/** 把当前浏览目录填入路径输入框 / Fill the path input with the browsed directory */
+function pickBrowsePath() {
+  pathInput.value = browsePath.value.startsWith('/host-data/')
+    ? '/vol2/1000/' + browsePath.value.slice('/host-data/'.length)
+    : browsePath.value
+  browsing.value = false
+}
 
 /**
  * 加载源素材列表数据。
@@ -268,7 +367,7 @@ function statusClass(v){return{AUTO_COPIED:'green',TRANSCODED:'green',PENDING_TR
  * 页面挂载：加载列表数据并初始化进度轮询。
  * On mount: load list data and initialize progress polling.
  */
-onMounted(async()=>{await Promise.all([load(),loadProgress()]);if(progress.value.running)timer=setInterval(loadProgress,1500)})
+onMounted(async()=>{await Promise.all([load(),loadProgress(),loadPath()]);if(progress.value.running)timer=setInterval(loadProgress,1500)})
 
 /**
  * 页面卸载：清除进度轮询定时器。
@@ -278,6 +377,7 @@ onUnmounted(()=>{if(timer)clearInterval(timer)})
 </script>
 
 <style scoped>
+.path-panel{background:#fff;border:1px solid #e2e8f0;border-radius:8px;padding:16px;margin-bottom:14px}.path-info{display:flex;flex-direction:column;gap:4px;margin-bottom:12px}.path-info strong{font-size:14px;color:#172033}.path-info span{font-size:13px;color:#334155;font-family:ui-monospace,SFMono-Regular,monospace}.path-info small{font-size:12px;color:#64748b}.path-edit{display:flex;flex-wrap:wrap;gap:8px}.path-edit input{flex:1 1 260px;height:36px;border:1px solid #cbd5e1;border-radius:6px;padding:0 10px;font:inherit;font-size:13px}.path-edit input:focus{border-color:#60a5fa;box-shadow:0 0 0 3px rgba(37,99,235,.1);outline:0}.browse-panel{margin-top:12px;border-top:1px solid #e2e8f0;padding-top:12px}.browse-head{display:flex;align-items:center;justify-content:space-between;font-size:12px;color:#64748b;font-family:ui-monospace,SFMono-Regular,monospace;margin-bottom:8px}.browse-list{display:flex;flex-wrap:wrap;gap:6px}.browse-item{height:32px;padding:0 12px;border:1px solid #dbe3ee;background:#f8fafc;border-radius:6px;font-size:12px;color:#334155;cursor:pointer}.browse-item:hover{border-color:#bfdbfe;background:#eff6ff}.browse-foot{margin-top:10px;display:flex;justify-content:flex-end}
 .page-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:18px}.page-head h1{font-size:22px}.page-head p{color:#64748b;font-size:13px;margin-top:6px}.primary,.secondary,.danger{height:34px;padding:0 14px;border-radius:6px;font-size:13px}.primary{background:#2563eb;color:#fff}.secondary{background:#fff;border:1px solid #cbd5e1;color:#334155}.danger{background:#fff;border:1px solid #fecaca;color:#b91c1c}.primary:disabled,.secondary:disabled,.danger:disabled{opacity:.45;cursor:not-allowed}.filter-panel{display:flex;align-items:flex-end;flex-wrap:wrap;gap:10px;padding:12px 14px;background:#fff;border:1px solid #e2e8f0;border-radius:8px;margin-bottom:14px}.filter-panel label{display:flex;flex:0 0 180px;flex-direction:column;gap:5px;color:#475569;font-size:12px}.filter-panel label:first-child{flex-basis:280px}.filter-panel input,.filter-panel select{width:100%;height:36px;border:1px solid #cbd5e1;border-radius:6px;padding:0 10px;background:#fff;color:#172033;font:inherit;font-size:13px;line-height:normal;box-shadow:0 1px 2px rgba(15,23,42,.03)}.filter-panel select{appearance:none;padding-right:34px;cursor:pointer}.select-control{position:relative;display:block}.select-control svg{position:absolute;right:10px;top:50%;color:#64748b;pointer-events:none;transform:translateY(-50%)}.filter-panel input:focus,.filter-panel select:focus{border-color:#60a5fa;box-shadow:0 0 0 3px rgba(37,99,235,.1);outline:0}.filter-actions{display:flex;align-items:flex-end;gap:8px}.filter-actions button{height:36px}.progress-panel,.table-panel{background:#fff;border:1px solid #e2e8f0;border-radius:8px}.progress-panel{padding:16px;margin-bottom:14px;display:grid;grid-template-columns:1fr auto;gap:8px}.progress-copy{display:flex;flex-direction:column;gap:4px}.progress-copy span,.current{font-size:12px;color:#64748b}.progress-value{color:#2563eb;font-weight:700}.track{grid-column:1/-1;height:6px;background:#e2e8f0;border-radius:4px;overflow:hidden}.track i{display:block;height:100%;background:#2563eb}.current{grid-column:1/-1}.toolbar,.pager{display:flex;align-items:center;justify-content:space-between;padding:13px 16px;color:#64748b;font-size:12px}.toolbar{border-bottom:1px solid #e2e8f0}.pager{border-top:1px solid #e2e8f0}.pager div{display:flex;gap:8px}.table-scroll{position:relative;overflow-x:auto}table{width:100%;border-collapse:separate;border-spacing:0}td,th{padding:12px 14px;font-size:12px;text-align:left;border-bottom:1px solid #e2e8f0;white-space:nowrap}td strong{display:block;font-size:13px;color:#172033;max-width:260px;overflow:hidden;text-overflow:ellipsis}td small{display:block;color:#64748b;font-size:11px;margin-top:2px;max-width:200px;overflow:hidden;text-overflow:ellipsis}.md5 small{font-family:ui-monospace,SFMono-Regular,monospace;font-size:11px}.action-cell{position:sticky;right:0;z-index:2;width:228px;min-width:228px;background:#fff;border-left:1px solid #e2e8f0;box-shadow:-10px 0 14px -14px rgba(15,23,42,.55)}thead .action-cell{z-index:3}.link{height:30px;border:1px solid #dbe3ee;background:#fff;color:#2563eb;font-size:11px;font-weight:600;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:4px;padding:0 8px;border-radius:6px}.link:hover:not(:disabled){border-color:#bfdbfe;background:#eff6ff}.danger-text{color:#b91c1c}.danger-text:hover:not(:disabled){border-color:#fecaca;background:#fef2f2}.priority-text{color:#b45309}.priority-text:hover:not(:disabled){border-color:#fde68a;background:#fffbeb}.status{display:inline-block;padding:2px 8px;font-size:11px;border-radius:4px;font-weight:600}.status.blue{background:#dbeafe;color:#1d4ed8}.status.green{background:#dcfce7;color:#15803d}.status.amber{background:#fef3c7;color:#a16207}.status.red{background:#fee2e2;color:#b91c1c}.status.neutral{background:#f1f5f9;color:#475569}.empty{text-align:center;padding:48px;color:#94a3b8}.header-actions,.batch-actions,.row-actions,.action-button{display:flex;align-items:center}.header-actions,.batch-actions{gap:8px}.action-button{justify-content:center;gap:5px;white-space:nowrap}.row-actions{gap:6px}.priority-text{color:#b45309}@media(max-width:700px){.page-head{align-items:flex-start;gap:12px}.header-actions,.batch-actions{flex-wrap:wrap;justify-content:flex-end}.toolbar{align-items:flex-start;gap:10px}.action-cell{width:220px;min-width:220px}.row-actions{gap:4px}.link{padding-inline:6px}}
 .cleanup-button{background:#dc2626;border-color:#dc2626;color:#fff;font-weight:700;box-shadow:0 3px 10px rgba(185,28,28,.28)}.cleanup-button:hover:not(:disabled){background:#b91c1c;border-color:#b91c1c;box-shadow:0 4px 14px rgba(185,28,28,.36)}.cleanup-button:focus-visible{outline:3px solid rgba(248,113,113,.35);outline-offset:2px}
 </style>

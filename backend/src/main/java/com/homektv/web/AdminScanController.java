@@ -9,6 +9,7 @@ import com.homektv.library.TranscodeService;
 import com.homektv.library.TranscodeHardwareService;
 import com.homektv.library.SongReparseService;
 import com.homektv.library.SongMergeService;
+import com.homektv.config.AppProperties;
 import com.homektv.domain.Song;
 import com.homektv.domain.MediaImportRecord;
 import com.homektv.web.dto.DashboardDto;
@@ -20,6 +21,10 @@ import com.homektv.web.dto.VocalReviewDto;
 import org.springframework.data.domain.Page;
 import org.springframework.web.bind.annotation.*;
 
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 
@@ -41,13 +46,14 @@ public class AdminScanController {
     private final TranscodeHardwareService transcodeHardwareService;
     private final SongReparseService reparseService;
     private final SongMergeService songMergeService;
+    private final AppProperties appProperties;
 
     public AdminScanController(LibraryScanService scanService, LibraryWatchService libraryWatchService,
                                AdminService adminService,
                                MediaImportService mediaImportService,
                                SettingService settingService, TranscodeService transcodeService,
                                TranscodeHardwareService transcodeHardwareService, SongReparseService reparseService,
-                               SongMergeService songMergeService) {
+                               SongMergeService songMergeService, AppProperties appProperties) {
         this.scanService = scanService;
         this.libraryWatchService = libraryWatchService;
         this.adminService = adminService;
@@ -57,6 +63,7 @@ public class AdminScanController {
         this.transcodeHardwareService = transcodeHardwareService;
         this.reparseService = reparseService;
         this.songMergeService = songMergeService;
+        this.appProperties = appProperties;
     }
 
     /**
@@ -91,6 +98,65 @@ public class AdminScanController {
     @GetMapping("/scan/progress")
     public MediaImportService.SourceScanProgress scanProgress() {
         return mediaImportService.getScanProgress();
+    }
+
+    /**
+     * 读取当前曲库路径设置（自定义路径优先，否则用默认路径）。
+     *
+     * Read the current source library path setting.
+     */
+    @GetMapping("/source-path")
+    public Map<String, Object> sourcePath() {
+        String custom = settingService.getCustomSourcePath();
+        String effective = settingService.resolveSourceRoot(appProperties.getSourceLibraryPath());
+        return Map.of(
+                "custom", custom,
+                "effective", effective,
+                "defaultPath", appProperties.getSourceLibraryPath(),
+                "exists", Files.isDirectory(Path.of(effective)),
+                "roots", List.of("/host-data", "/source-music"));
+    }
+
+    /**
+     * 保存自定义曲库路径（宿主机写法，如 /vol2/1000/mv；空表示恢复默认）。
+     * 保存后立即生效，监听服务自动切换到新路径。
+     *
+     * Save a custom source library path (host-style path, e.g. /vol2/1000/mv;
+     * empty resets to the default). Takes effect immediately.
+     */
+    @PutMapping("/source-path")
+    public Map<String, Object> saveSourcePath(@RequestBody(required = false) Map<String, String> body) {
+        String raw = body == null ? "" : body.getOrDefault("path", "");
+        SettingService.validateCustomSourcePath(raw);
+        settingService.putAll(Map.of(SettingService.CUSTOM_SOURCE_PATH, raw == null ? "" : raw.trim()));
+        libraryWatchService.reloadFromSettings();
+        return sourcePath();
+    }
+
+    /**
+     * 浏览目录（仅限 /host-data 与 /source-music 两个根目录内），供前端选择曲库路径。
+     *
+     * Browse directories under /host-data or /source-music for picking a library path.
+     */
+    @GetMapping("/browse-dirs")
+    public Map<String, Object> browseDirs(@RequestParam(defaultValue = "") String path) {
+        String current = path.isBlank() ? "/host-data" : SettingService.toContainerPath(path);
+        Path dir = Path.of(current).toAbsolutePath().normalize();
+        if (!dir.startsWith("/host-data") && !dir.startsWith("/source-music")) dir = Path.of("/host-data");
+        List<Map<String, String>> dirs = new ArrayList<>();
+        if (Files.isDirectory(dir)) {
+            try (var stream = Files.list(dir)) {
+                stream.filter(Files::isDirectory)
+                        .sorted(Comparator.comparing(p -> p.getFileName().toString()))
+                        .limit(200)
+                        .forEach(p -> dirs.add(Map.of("name", p.getFileName().toString(), "path", p.toString())));
+            } catch (java.io.IOException e) {
+                throw new ApiException("BROWSE_FAILED", "无法列出目录：" + dir);
+            }
+        }
+        String parent = dir.getParent() == null ? "" : dir.getParent().toString();
+        if (!parent.startsWith("/host-data") && !parent.startsWith("/source-music")) parent = "";
+        return Map.of("path", dir.toString(), "parent", parent, "dirs", dirs);
     }
 
     /**
